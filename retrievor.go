@@ -18,12 +18,14 @@ const urlPattern = "https://www.matchendirect.fr/%s/%s"
 const scope = "monde"
 const date = "2019-03"
 
+// ResultParse Matches by date
 type ResultParse struct {
-	currentDate string
-	nextDate    string
-	Matches     []Match
+	currentDate string  // current date
+	nextDate    string  // next date
+	Matches     []Match // list of matches for current date
 }
 
+// Match Data about a specific match
 type Match struct {
 	Date        time.Time `json:"time"`
 	Competition string    `json:"competition"`
@@ -51,7 +53,7 @@ func main() {
 }
 
 // Returns formatted url with scope and date
-func getUrl(scope string, date string) string {
+func getURL(scope string, date string) string {
 	return fmt.Sprintf(urlPattern, scope, date)
 }
 
@@ -72,7 +74,7 @@ func (r *ResultParse) exportAsCSV() error {
 }
 
 func (r *ResultParse) parseAll() error {
-	var url = getUrl(scope, r.currentDate)
+	var url = getURL(scope, r.currentDate)
 	fmt.Print(fmt.Sprintf("> %s :", url))
 	doc, err := goquery.NewDocument(url)
 	if err != nil {
