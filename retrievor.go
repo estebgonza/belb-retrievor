@@ -15,13 +15,15 @@ import (
 )
 
 const urlPattern = "https://www.matchendirect.fr/%s/%s"
-const scope = "monde"
-const date = "2019-03"
+
+//const scope = "monde"
+// const date = "2019-03"
 
 // ResultParse Matches by date
 type ResultParse struct {
-	currentDate string  // current date
-	nextDate    string  // next date
+	Scope       string  // scope of matches. eg. monde
+	CurrentDate string  // current date
+	NextDate    string  // next date
 	Matches     []Match // list of matches for current date
 }
 
@@ -35,29 +37,32 @@ type Match struct {
 	Status      string    `json:"status"`
 }
 
-func main() {
-	fmt.Println("El Retrievor")
-	// Initialize on first page
-	var r = ResultParse{currentDate: date}
-	r.parseAll()
-	// Iterate trough all pages
-	for ; r.nextDate != ""; r.parseAll() {
-		if r.nextDate <= r.currentDate {
-			break
-		}
-		// Switch page
-		r.currentDate = r.nextDate
-		r.nextDate = ""
-	}
-	r.exportAsCSV()
-}
+// func main() {
+// 	fmt.Println("El Retrievor")
+// 	// Initialize on first page
+// 	scope := "monde"
+// 	date := "2019-03"
+// 	var r = ResultParse{CurrentDate: date, Scope: scope}
+// 	r.ParseAll()
+// 	// Iterate trough all pages
+// 	for ; r.NextDate != ""; r.ParseAll() {
+// 		if r.NextDate <= r.CurrentDate {
+// 			break
+// 		}
+// 		// Switch page
+// 		r.CurrentDate = r.NextDate
+// 		r.NextDate = ""
+// 	}
+// 	r.ExportAsCSV()
+// }
 
 // Returns formatted url with scope and date
 func getURL(scope string, date string) string {
 	return fmt.Sprintf(urlPattern, scope, date)
 }
 
-func (r *ResultParse) exportAsCSV() error {
+// ExportAsCSV export results in a CSV file
+func (r *ResultParse) ExportAsCSV() error {
 	f, err := os.Create(fmt.Sprintf("matches-%d.csv", time.Now().Second()))
 	if err != nil {
 		return err
@@ -73,8 +78,9 @@ func (r *ResultParse) exportAsCSV() error {
 	return nil
 }
 
-func (r *ResultParse) parseAll() error {
-	var url = getURL(scope, r.currentDate)
+// ParseAll is the starting point of the module
+func (r *ResultParse) ParseAll() error {
+	var url = getURL(r.Scope, r.CurrentDate)
 	fmt.Print(fmt.Sprintf("> %s :", url))
 	doc, err := goquery.NewDocument(url)
 	if err != nil {
@@ -91,7 +97,7 @@ func (r *ResultParse) parseNextDate(doc *goquery.Document) {
 	doc.Find(".objselect_prevnext").Each(func(i int, s *goquery.Selection) {
 		valueHref, exist := s.Attr("href")
 		if exist {
-			r.nextDate = strings.Split(valueHref, "/")[2]
+			r.NextDate = strings.Split(valueHref, "/")[2]
 		}
 	})
 }
