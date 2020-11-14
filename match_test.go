@@ -1,42 +1,43 @@
 package retrievor
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"testing"
 )
 
-func TestMatchBase(t *testing.T) {
-	scope := "monde"
-	date := "2020-01"
-	var r = ResultParse{CurrentDate: date, Scope: scope}
-	r.ParseAll()
-	// Iterate trough all pages
-	for ; r.NextDate != ""; r.ParseAll() {
-		if r.NextDate <= r.CurrentDate {
-			break
-		}
-		// Switch page
-		r.CurrentDate = r.NextDate
-		r.NextDate = ""
+func TestParseLittleRange_1(t *testing.T) {
+	r := MatchesResult{}
+	r.ParseAllWithStringRange("2009-01-31", "2009-02-01")
+	content, _ := ioutil.ReadFile("asserts/matchs/assert_2009-01-31_2009-02-01.txt")
+	expected := string(content)
+	resultJson, _ := json.Marshal(r.Matches)
+	result := string(resultJson)
+	if expected != result {
+		t.Errorf("Matches struct are differents than expected. Expected=%s, Result=%s", expected, result)
 	}
-	r.ExportAsCSV()
 }
 
-func TestMatchResult(t *testing.T) {
-	scope := "monde"
-	date := "2020-01"
-	var r = ResultParse{CurrentDate: date, Scope: scope}
-	r.ParseAll()
-	if r.Matches[0].T2 != "Auxerre" {
-		t.Errorf("Team 2 of match 0 should be Auxerre: is %s", r.Matches[0].T2)
+func TestParseLittleRange_2(t *testing.T) {
+	r := MatchesResult{}
+	r.ParseAllWithStringRange("2012-01-31", "2012-02-01")
+	content, _ := ioutil.ReadFile("asserts/matchs/assert_2012-01-31_2012-02-01.txt")
+	expected := string(content)
+	resultJson, _ := json.Marshal(r.Matches)
+	result := string(resultJson)
+	if expected != result {
+		t.Errorf("Matches struct are differents than expected. Expected=%s, Result=%s", expected, result)
 	}
-	if r.Matches[2].Draw {
-		t.Errorf("Draw of match 2 should be false: is %t", r.Matches[2].Draw)
+}
+
+func TestParseLittleRange_3(t *testing.T) {
+	r := MatchesResult{}
+	r.ParseAllWithStringRange("2020-07-15", "2020-07-20")
+	content, _ := ioutil.ReadFile("asserts/matchs/assert_2020-07-15_2020-07-20.txt")
+	expected := string(content)
+	resultJson, _ := json.Marshal(r.Matches)
+	result := string(resultJson)
+	if expected != result {
+		t.Errorf("Matches struct are differents than expected. Expected=%s, Result=%s", expected, result)
 	}
-	if !r.Matches[5].Draw {
-		t.Errorf("Draw of match 5 should be true: is %t", r.Matches[2].Draw)
-	}
-	if r.Matches[9].Winner != "NEC" {
-		t.Errorf("Winner of match 9 should be NEC: is %s", r.Matches[9].Winner)
-	}
-	// r.ExportAsCSV()
 }
