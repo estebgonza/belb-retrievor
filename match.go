@@ -14,16 +14,20 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-const urlPattern = "https://www.matchendirect.fr/%s/%s"
-const scope = "monde"
-const date = "2019-03"
+const matchURLPattern = "https://www.matchendirect.fr/%s/%s"
 
+//const scope = "monde"
+// const date = "2019-03"
+
+// ResultParse Matches by date
 type ResultParse struct {
-	currentDate string
-	nextDate    string
-	Matches     []Match
+	Scope       string  // scope of matches. eg. monde
+	CurrentDate string  // current date
+	NextDate    string  // next date
+	Matches     []Match // list of matches for current date
 }
 
+// Match Data about a specific match
 type Match struct {
 	Date        time.Time `json:"time"`
 	Competition string    `json:"competition"`
@@ -31,31 +35,55 @@ type Match struct {
 	T2          string    `json:"t2"`
 	Score       string    `json:"score"`
 	Status      string    `json:"status"`
-}
-
-func main() {
-	fmt.Println("El Retrievor")
-	// Initialize on first page
-	var r = ResultParse{currentDate: date}
-	r.parseAll()
-	// Iterate trough all pages
-	for ; r.nextDate != ""; r.parseAll() {
-		if r.nextDate <= r.currentDate {
-			break
-		}
-		// Switch page
-		r.currentDate = r.nextDate
-		r.nextDate = ""
-	}
-	r.exportAsCSV()
+	Winner      string    `json:"winner"`
+	Draw        bool      `json:"draw"`
 }
 
 // Returns formatted url with scope and date
-func getUrl(scope string, date string) string {
-	return fmt.Sprintf(urlPattern, scope, date)
+func getMatchURL(scope string, date string) string {
+	return fmt.Sprintf(matchURLPattern, scope, date)
 }
 
-func (r *ResultParse) exportAsCSV() error {
+func getWinner(t1 string, t2 string, score string) string {
+	scores := strings.Split(score, "-")
+	fmt.Println(scores)
+
+	return score
+}
+
+func (m *Match) setWinner() {
+	if m.Status != "Terminé" {
+		return
+	}
+	m.Score = strings.ReplaceAll(m.Score, " ", "")
+	scores := strings.Split(m.Score, "-")
+	log.Println(scores)
+	if len(scores) != 2 {
+		log.Printf("error during score parsing of match %s vs %s\n", m.T1, m.T2)
+		return
+	}
+	winIndex := winIndexString(scores)
+	if winIndex == 1 {
+		m.Winner = m.T1
+	} else if winIndex == 2 {
+		m.Winner = m.T2
+	} else {
+		m.Winner = "draw"
+	}
+	m.setDraw(winIndex)
+
+}
+
+func (m *Match) setDraw(i int) {
+	if i != 0 {
+		m.Draw = false
+	} else {
+		m.Draw = true
+	}
+}
+
+// ExportAsCSV export results in a CSV file
+func (r *ResultParse) ExportAsCSV() error {
 	f, err := os.Create(fmt.Sprintf("matches-%d.csv", time.Now().Second()))
 	if err != nil {
 		return err
@@ -64,15 +92,16 @@ func (r *ResultParse) exportAsCSV() error {
 
 	w := bufio.NewWriter(f)
 	for _, m := range r.Matches {
-		line := fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n", m.Date.String(), m.Competition, m.T1, m.T2, m.Score, m.Status)
+		line := fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%t\"\n", m.Date.String(), m.Competition, m.T1, m.T2, m.Score, m.Status, m.Winner, m.Draw)
 		w.WriteString(line)
 	}
 	w.Flush()
 	return nil
 }
 
-func (r *ResultParse) parseAll() error {
-	var url = getUrl(scope, r.currentDate)
+// ParseAll is the starting point of the module
+func (r *ResultParse) ParseAll() error {
+	var url = getMatchURL(r.Scope, r.CurrentDate)
 	fmt.Print(fmt.Sprintf("> %s :", url))
 	doc, err := goquery.NewDocument(url)
 	if err != nil {
@@ -89,7 +118,7 @@ func (r *ResultParse) parseNextDate(doc *goquery.Document) {
 	doc.Find(".objselect_prevnext").Each(func(i int, s *goquery.Selection) {
 		valueHref, exist := s.Attr("href")
 		if exist {
-			r.nextDate = strings.Split(valueHref, "/")[2]
+			r.NextDate = strings.Split(valueHref, "/")[2]
 		}
 	})
 }
@@ -120,6 +149,7 @@ func (r *ResultParse) parseMatches(doc *goquery.Document) {
 					score = strings.TrimSpace(score)
 					status = parseStatus(status)
 					date := convToDate(currentDate, hours)
+
 					m := Match{
 						Competition: currentCompetition,
 						Date:        date,
@@ -128,6 +158,7 @@ func (r *ResultParse) parseMatches(doc *goquery.Document) {
 						Score:       score,
 						Status:      status,
 					}
+					m.setWinner()
 					r.Matches = append(r.Matches, m)
 				})
 			}

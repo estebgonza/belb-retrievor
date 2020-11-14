@@ -1,4 +1,4 @@
-package main
+package retrievor
 
 // Retrieve all clubs on https://footballdatabase.com
 // Ouput in CSV
@@ -13,37 +13,28 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-const urlPattern = "https://footballdatabase.com/clubs-list-letter/%s"
+const clubURLPattern = "https://footballdatabase.com/clubs-list-letter/%s"
 
 var countries = []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "1"}
 
-type ResultParse struct {
-	currentPage string
+// ClubParse Main struct for parsing soccers clubs in footballdatabase
+type ClubParse struct {
+	CurrentPage string
 	Clubs       []Club
 }
 
+// Club Represent one club
 type Club struct {
-	id   string
-	name string
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
-func main() {
-	fmt.Println("El Retrievor")
-	// Iterate trough all pages
-	r := ResultParse{}
-	for _, e := range countries {
-		r.currentPage = e
-		r.parseAll()
-
-	}
-	r.exportAsCSV()
+func getURL(page string) string {
+	return fmt.Sprintf(clubURLPattern, page)
 }
 
-func getUrl(page string) string {
-	return fmt.Sprintf(urlPattern, page)
-}
-
-func (r *ResultParse) exportAsCSV() error {
+// ExportAsCSV Used to export content of ClubParse in a csv file
+func (r *ClubParse) ExportAsCSV() error {
 	f, err := os.Create(fmt.Sprintf("clubs-%d.csv", time.Now().Second()))
 	if err != nil {
 		return err
@@ -52,15 +43,16 @@ func (r *ResultParse) exportAsCSV() error {
 
 	w := bufio.NewWriter(f)
 	for _, e := range r.Clubs {
-		line := fmt.Sprintf("\"%s\",\"%s\"\n", e.id, e.name)
+		line := fmt.Sprintf("\"%s\",\"%s\"\n", e.ID, e.Name)
 		w.WriteString(line)
 	}
 	w.Flush()
 	return nil
 }
 
-func (r *ResultParse) parseAll() error {
-	var url = getUrl(r.currentPage)
+// ParseAll Main method to parse all clubs of current date
+func (r *ClubParse) ParseAll() error {
+	var url = getURL(r.CurrentPage)
 	fmt.Print(fmt.Sprintf("> %s :", url))
 	doc, err := goquery.NewDocument(url)
 	if err != nil {
@@ -72,14 +64,14 @@ func (r *ResultParse) parseAll() error {
 	return nil
 }
 
-func (r *ResultParse) parseClub(doc *goquery.Document) {
+func (r *ClubParse) parseClub(doc *goquery.Document) {
 	doc.Find(".sm_logo-name").Each(func(i int, s *goquery.Selection) {
 		c := Club{}
-		c.name = s.Text()
+		c.Name = s.Text()
 		v, exist := s.Attr("href")
 		if exist {
 			id := strings.Split(v, "/")[2]
-			c.id = id
+			c.ID = id
 		}
 		r.Clubs = append(r.Clubs, c)
 	})
