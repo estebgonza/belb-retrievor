@@ -17,10 +17,7 @@ import (
 // Start date 2009-12-01
 const matchURLPattern = "https://footballdatabase.com/scores/%s"
 
-//const scope = "monde"
-// const date = "2019-03"
-
-// ResultParse Matches by date
+// MatchesResult List of all matches parsed
 type MatchesResult struct {
 	currentDate time.Time
 	Matches     []Match
@@ -29,7 +26,7 @@ type MatchesResult struct {
 // Match Data about a specific match
 type Match struct {
 	Date            time.Time `json:"time"`
-	CompetitionId   string    `json:"competition_id"`
+	CompetitionID   string    `json:"competition_id"`
 	CompetitionName string    `json:"competition_name"`
 	T1Id            string    `json:"t1_id"`
 	T2Id            string    `json:"t2_id"`
@@ -37,7 +34,7 @@ type Match struct {
 	T2Name          string    `json:"t2_name"`
 	T1Score         int       `json:"t1_score"`
 	T2Score         int       `json:"t2_score"`
-	WinnerId        string    `json:"winner_id"`
+	WinnerID        string    `json:"winner_id"`
 	Draw            bool      `json:"draw"`
 }
 
@@ -46,18 +43,17 @@ func getMatchURL(date string) string {
 	return fmt.Sprintf(matchURLPattern, date)
 }
 
-func (m *Match) checkWinner() {
-	m.checkDraw()
+func (m *Match) setWinner() {
 	if !m.Draw {
 		if m.T1Score > m.T2Score {
-			m.WinnerId = m.T1Id
+			m.WinnerID = m.T1Id
 		} else {
-			m.WinnerId = m.T2Id
+			m.WinnerID = m.T2Id
 		}
 	}
 }
 
-func (m *Match) checkDraw() {
+func (m *Match) setDraw() {
 	m.Draw = m.T1Score == m.T2Score
 }
 
@@ -71,13 +67,14 @@ func (r *MatchesResult) ExportAsCSV() error {
 
 	w := bufio.NewWriter(f)
 	for _, m := range r.Matches {
-		line := fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%d\",\"%d\",\"%s\",\"%t\"\n", m.Date.String(), m.CompetitionId, m.CompetitionName, m.T1Name, m.T2Name, m.T1Id, m.T2Id, m.T1Score, m.T2Score, m.WinnerId, m.Draw)
+		line := fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%d\",\"%d\",\"%s\",\"%t\"\n", m.Date.String(), m.CompetitionID, m.CompetitionName, m.T1Name, m.T2Name, m.T1Id, m.T2Id, m.T1Score, m.T2Score, m.WinnerID, m.Draw)
 		w.WriteString(line)
 	}
 	w.Flush()
 	return nil
 }
 
+// ParseAllWithStringRange Convert string time to time.Time and call ParseAllWithTimeRange
 func (r *MatchesResult) ParseAllWithStringRange(start string, end string) error {
 	s, err := time.Parse("2006-01-02", start)
 	if err != nil {
@@ -91,6 +88,7 @@ func (r *MatchesResult) ParseAllWithStringRange(start string, end string) error 
 	return nil
 }
 
+// ParseAllWithTimeRange Set current date and call ParsePage
 func (r *MatchesResult) ParseAllWithTimeRange(start time.Time, end time.Time) error {
 	for d := start; d.After(end) == false; d = d.AddDate(0, 0, 1) {
 		r.currentDate = d
@@ -103,7 +101,7 @@ func (r *MatchesResult) ParseAllWithTimeRange(start time.Time, end time.Time) er
 	return nil
 }
 
-// ParseAll is the starting point of the module
+// ParsePage Parse all matches of a specific date
 func (r *MatchesResult) ParsePage(date string) error {
 	var url = getMatchURL(date)
 	fmt.Print(fmt.Sprintf("> %s : ", url))
@@ -118,7 +116,7 @@ func (r *MatchesResult) ParsePage(date string) error {
 }
 
 func (r *MatchesResult) parseMatches(doc *goquery.Document) {
-	var competitionId string
+	var competitionID string
 	var competitionName string
 	doc.Find(".col-md-9").Children().Each(func(i int, s *goquery.Selection) {
 		node := s.Nodes[0]
@@ -128,7 +126,7 @@ func (r *MatchesResult) parseMatches(doc *goquery.Document) {
 		case "a":
 			v, e := s.Attr("name")
 			if e {
-				competitionId = v
+				competitionID = v
 			}
 			break
 		case "h4":
@@ -138,7 +136,7 @@ func (r *MatchesResult) parseMatches(doc *goquery.Document) {
 			// Create Match struct
 			m := Match{}
 			m.Date = r.currentDate
-			m.CompetitionId = competitionId
+			m.CompetitionID = competitionID
 			m.CompetitionName = competitionName
 			// Check if it's a result match div
 			v, e := s.Attr("class")
@@ -166,8 +164,8 @@ func (r *MatchesResult) parseMatches(doc *goquery.Document) {
 				m.T2Name = t2Name
 				m.T1Score = s1
 				m.T2Score = s2
-				m.checkWinner()
-				m.checkDraw()
+				m.setDraw()
+				m.setWinner()
 				r.Matches = append(r.Matches, m)
 			}
 		}
