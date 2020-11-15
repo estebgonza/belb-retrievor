@@ -91,7 +91,6 @@ func (r *MatchesResult) ParseAllWithStringRange(start string, end string) error 
 // ParseAllWithTimeRange Set current date and call ParsePage
 func (r *MatchesResult) ParseAllWithTimeRange(start time.Time, end time.Time) error {
 	for d := start; d.After(end) == false; d = d.AddDate(0, 0, 1) {
-		r.currentDate = d
 		date := d.Format("2006-01-02")
 		err := r.ParsePage(date)
 		if err != nil {
@@ -104,6 +103,11 @@ func (r *MatchesResult) ParseAllWithTimeRange(start time.Time, end time.Time) er
 // ParsePage Parse all matches of a specific date
 func (r *MatchesResult) ParsePage(date string) error {
 	var url = getMatchURL(date)
+	d, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return err
+	}
+	r.currentDate = d
 	fmt.Print(fmt.Sprintf("> %s : ", url))
 	doc, err := goquery.NewDocument(url)
 	if err != nil {

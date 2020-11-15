@@ -13,7 +13,7 @@ func TestClubBase(t *testing.T) {
 		c.ParseAll()
 
 	}
-	c.ExportAsCSV()
+	// c.ExportAsCSV()
 }
 
 func TestClubP(t *testing.T) {
