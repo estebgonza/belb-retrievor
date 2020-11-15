@@ -27,5 +27,4 @@ func TestClubP(t *testing.T) {
 	if c.Clubs[25].ID != "paris-saint-germain" {
 		t.Errorf("Club at index 25 should be paris-saint-germain: is %s", c.Clubs[25].ID)
 	}
-	//c.exportAsCSV()
 }

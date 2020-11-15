@@ -6,84 +6,59 @@ package retrievor
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
-const matchURLPattern = "https://www.matchendirect.fr/%s/%s"
+// Start date 2009-12-01
+const matchURLPattern = "https://footballdatabase.com/scores/%s"
 
-//const scope = "monde"
-// const date = "2019-03"
-
-// ResultParse Matches by date
-type ResultParse struct {
-	Scope       string  // scope of matches. eg. monde
-	CurrentDate string  // current date
-	NextDate    string  // next date
-	Matches     []Match // list of matches for current date
+// MatchesResult List of all matches parsed
+type MatchesResult struct {
+	currentDate time.Time
+	Matches     []Match
 }
 
 // Match Data about a specific match
 type Match struct {
-	Date        time.Time `json:"time"`
-	Competition string    `json:"competition"`
-	T1          string    `json:"t1"`
-	T2          string    `json:"t2"`
-	Score       string    `json:"score"`
-	Status      string    `json:"status"`
-	Winner      string    `json:"winner"`
-	Draw        bool      `json:"draw"`
+	Date            time.Time `json:"time"`
+	CompetitionID   string    `json:"competition_id"`
+	CompetitionName string    `json:"competition_name"`
+	T1Id            string    `json:"t1_id"`
+	T2Id            string    `json:"t2_id"`
+	T1Name          string    `json:"t1_name"`
+	T2Name          string    `json:"t2_name"`
+	T1Score         int       `json:"t1_score"`
+	T2Score         int       `json:"t2_score"`
+	WinnerID        string    `json:"winner_id"`
+	Draw            bool      `json:"draw"`
 }
 
-// Returns formatted url with scope and date
-func getMatchURL(scope string, date string) string {
-	return fmt.Sprintf(matchURLPattern, scope, date)
-}
-
-func getWinner(t1 string, t2 string, score string) string {
-	scores := strings.Split(score, "-")
-	fmt.Println(scores)
-
-	return score
+// Returns formatted url for the date
+func getMatchURL(date string) string {
+	return fmt.Sprintf(matchURLPattern, date)
 }
 
 func (m *Match) setWinner() {
-	if m.Status != "Terminé" {
-		return
+	if !m.Draw {
+		if m.T1Score > m.T2Score {
+			m.WinnerID = m.T1Id
+		} else {
+			m.WinnerID = m.T2Id
+		}
 	}
-	m.Score = strings.ReplaceAll(m.Score, " ", "")
-	scores := strings.Split(m.Score, "-")
-	log.Println(scores)
-	if len(scores) != 2 {
-		log.Printf("error during score parsing of match %s vs %s\n", m.T1, m.T2)
-		return
-	}
-	winIndex := winIndexString(scores)
-	if winIndex == 1 {
-		m.Winner = m.T1
-	} else if winIndex == 2 {
-		m.Winner = m.T2
-	} else {
-		m.Winner = "draw"
-	}
-	m.setDraw(winIndex)
-
 }
 
-func (m *Match) setDraw(i int) {
-	if i != 0 {
-		m.Draw = false
-	} else {
-		m.Draw = true
-	}
+func (m *Match) setDraw() {
+	m.Draw = m.T1Score == m.T2Score
 }
 
 // ExportAsCSV export results in a CSV file
-func (r *ResultParse) ExportAsCSV() error {
+func (r *MatchesResult) ExportAsCSV() error {
 	f, err := os.Create(fmt.Sprintf("matches-%d.csv", time.Now().Second()))
 	if err != nil {
 		return err
@@ -92,126 +67,107 @@ func (r *ResultParse) ExportAsCSV() error {
 
 	w := bufio.NewWriter(f)
 	for _, m := range r.Matches {
-		line := fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%t\"\n", m.Date.String(), m.Competition, m.T1, m.T2, m.Score, m.Status, m.Winner, m.Draw)
+		line := fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%d\",\"%d\",\"%s\",\"%t\"\n", m.Date.String(), m.CompetitionID, m.CompetitionName, m.T1Name, m.T2Name, m.T1Id, m.T2Id, m.T1Score, m.T2Score, m.WinnerID, m.Draw)
 		w.WriteString(line)
 	}
 	w.Flush()
 	return nil
 }
 
-// ParseAll is the starting point of the module
-func (r *ResultParse) ParseAll() error {
-	var url = getMatchURL(r.Scope, r.CurrentDate)
-	fmt.Print(fmt.Sprintf("> %s :", url))
+// ParseAllWithStringRange Convert string time to time.Time and call ParseAllWithTimeRange
+func (r *MatchesResult) ParseAllWithStringRange(start string, end string) error {
+	s, err := time.Parse("2006-01-02", start)
+	if err != nil {
+		return err
+	}
+	e, err := time.Parse("2006-01-02", end)
+	if err != nil {
+		return err
+	}
+	r.ParseAllWithTimeRange(s, e)
+	return nil
+}
+
+// ParseAllWithTimeRange Set current date and call ParsePage
+func (r *MatchesResult) ParseAllWithTimeRange(start time.Time, end time.Time) error {
+	for d := start; d.After(end) == false; d = d.AddDate(0, 0, 1) {
+		r.currentDate = d
+		date := d.Format("2006-01-02")
+		err := r.ParsePage(date)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ParsePage Parse all matches of a specific date
+func (r *MatchesResult) ParsePage(date string) error {
+	var url = getMatchURL(date)
+	fmt.Print(fmt.Sprintf("> %s : ", url))
 	doc, err := goquery.NewDocument(url)
 	if err != nil {
 		return err
 	}
-	r.parseNextDate(doc)
 	r.parseMatches(doc)
-	fmt.Println(" OK!")
+	fmt.Println("OK.")
 
 	return nil
 }
 
-func (r *ResultParse) parseNextDate(doc *goquery.Document) {
-	doc.Find(".objselect_prevnext").Each(func(i int, s *goquery.Selection) {
-		valueHref, exist := s.Attr("href")
-		if exist {
-			r.NextDate = strings.Split(valueHref, "/")[2]
-		}
-	})
-}
-
-func (r *ResultParse) parseMatches(doc *goquery.Document) {
-	doc.Find("div.panel-info").Each(func(i int, s *goquery.Selection) {
-		// Find competition name
-		currentCompetition, _ := s.Find("div.lienCompetition a").Html()
-		if currentCompetition == "" {
-			// Not in panel for competition
-			return
-		}
-		var currentDate string
-		s.Find("div.panel-body > table.table").Children().Each(func(i int, s *goquery.Selection) {
-			node := s.Nodes[0]
-			divType := node.Data
-			// Date
-
-			if divType == "thead" {
-				currentDate, _ = s.Find("tr > th").Html()
-			} else if divType == "tbody" {
-				s.Find("tr").Each(func(i int, s *goquery.Selection) {
-					var t1 = s.Find(".lm3_eq1").Text()
-					var t2 = s.Find(".lm3_eq2").Text()
-					var hours = s.Find(".lm1").Text()
-					var score = s.Find(".lm3_score").Text()
-					var status = s.Find(".lm2_0").Text()
-					score = strings.TrimSpace(score)
-					status = parseStatus(status)
-					date := convToDate(currentDate, hours)
-
-					m := Match{
-						Competition: currentCompetition,
-						Date:        date,
-						T1:          t1,
-						T2:          t2,
-						Score:       score,
-						Status:      status,
-					}
-					m.setWinner()
-					r.Matches = append(r.Matches, m)
-				})
+func (r *MatchesResult) parseMatches(doc *goquery.Document) {
+	var competitionID string
+	var competitionName string
+	doc.Find(".col-md-9").Children().Each(func(i int, s *goquery.Selection) {
+		node := s.Nodes[0]
+		divType := node.Data
+		// Date
+		switch divType {
+		case "a":
+			v, e := s.Attr("name")
+			if e {
+				competitionID = v
 			}
-		})
+			break
+		case "h4":
+			competitionName = s.Text()
+			break
+		case "div":
+			// Create Match struct
+			m := Match{}
+			m.Date = r.currentDate
+			m.CompetitionID = competitionID
+			m.CompetitionName = competitionName
+			// Check if it's a result match div
+			v, e := s.Attr("class")
+			if e && strings.Contains(v, "club-gamelist-match") {
+				var t1Name, t2Name, t1Id, t2Id string
+				scoreString := s.Find(".club-gamelist-match-score").Text()
+				scores := strings.Split(strings.TrimSpace(scoreString), "-")
+				s.Find(".club-gamelist-match-clubs").Each(func(i int, s *goquery.Selection) {
+					if t1Id == "" {
+						e, _ := s.Find("a").Attr("href")
+						t1Id = strings.Split(e, "/")[2]
+						t1Name = s.Text()
+					} else {
+						e, _ := s.Find("a").Attr("href")
+						t2Id = strings.Split(e, "/")[2]
+						t2Name = s.Text()
+					}
+				})
+				s1, _ := strconv.Atoi(strings.TrimSpace(scores[0]))
+				s2, _ := strconv.Atoi(strings.TrimSpace(scores[1]))
+				// Fill results
+				m.T1Id = t1Id
+				m.T2Id = t2Id
+				m.T1Name = t1Name
+				m.T2Name = t2Name
+				m.T1Score = s1
+				m.T2Score = s2
+				m.setDraw()
+				m.setWinner()
+				r.Matches = append(r.Matches, m)
+			}
+		}
 	})
-}
-
-func convToDate(frDate string, hours string) time.Time {
-	elem := strings.Split(frDate, " ")
-	day := elem[1]
-	month := monthToNumber(elem[2])
-	year := elem[3]
-	formattedDateString := fmt.Sprintf("%s-%s-%s %s", year, month, day, hours)
-	date, _ := time.Parse("2006-01-02 15:04", formattedDateString)
-	return date
-}
-
-func monthToNumber(frMonth string) string {
-	frMonth = strings.ToUpper(frMonth)
-	switch frMonth {
-	case "JANVIER":
-		return "01"
-	case "FÉVRIER":
-		return "02"
-	case "MARS":
-		return "03"
-	case "AVRIL":
-		return "04"
-	case "MAI":
-		return "05"
-	case "JUIN":
-		return "06"
-	case "JUILLET":
-		return "07"
-	case "AOÛT":
-		return "08"
-	case "SEPTEMBRE":
-		return "09"
-	case "OCTOBRE":
-		return "10"
-	case "NOVEMBRE":
-		return "11"
-	case "DÉCEMBRE":
-		return "12"
-	}
-	log.Fatalf("Unrecognize month: %s", frMonth)
-	return "01"
-}
-
-func parseStatus(statusText string) string {
-	statusText = strings.ReplaceAll(statusText, "-- : --", "")
-	if strings.Contains(statusText, ":") {
-		statusText = statusText[5:len(statusText)]
-	}
-	return statusText
 }
